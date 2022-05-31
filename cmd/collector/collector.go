@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/ZombieMInd/search-engine/internal/constants"
 	"github.com/ZombieMInd/search-engine/internal/store/redisstore"
 	collector "github.com/ZombieMInd/search-engine/internal/url_collector"
 	"github.com/go-redis/redis"
@@ -11,7 +12,33 @@ import (
 )
 
 func main() {
-	collection := map[string]int{}
+
+	for i := 0; i < 50; i++ {
+		go run()
+	}
+
+	go func() {
+		cfg := &collector.Config{}
+		err := InitConfig(cfg)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		db, err := initDB(cfg)
+		if err != nil {
+			log.Fatal(err)
+		}
+		for {
+			log.Printf("total count: %d", db.GetDomainsCount())
+			time.Sleep(5 * time.Second)
+		}
+	}()
+
+	run()
+}
+
+func run() {
+	collection := map[string]interface{}{}
 
 	cfg := &collector.Config{}
 	err := InitConfig(cfg)
@@ -24,29 +51,31 @@ func main() {
 		log.Fatal(err)
 	}
 
-	initialValue := db.GetFirstUnderValue(2)
-	collection[initialValue] = 1
-
-	if initialValue == "" {
-		collection["https://moz.com/top500"] = 1
-	}
+	collection = initCollection(db)
 
 	for {
 		collection = collector.Collect(collection)
-		log.Printf("collection size: %d\n", len(collection))
+		//log.Printf("collected %d domains\n", len(collection))
 
-		saveCollection(collection, db)
-
-		collection = map[string]int{
-			db.GetFirstUnderValue(2): 1,
+		if len(collection) > 0 {
+			saveCollection(collection, db)
 		}
-		time.Sleep(5 * time.Second)
+
+		collection = initCollection(db)
 	}
-	//
-	//res := db.GetAll()
-	//if res != nil {
-	//	fmt.Println("done")
-	//}
+}
+
+func initCollection(db Store) map[string]interface{} {
+	initialValue := db.GetRandomDomain()
+	if initialValue == "" {
+		initialValue = constants.DefaultURLForCollection
+	}
+
+	//log.Printf("collection initialized with %s\n", initialValue)
+
+	return map[string]interface{}{
+		initialValue: nil,
+	}
 }
 
 func InitConfig(conf *collector.Config) error {
@@ -73,11 +102,12 @@ func initDB(cfg *collector.Config) (*redisstore.Store, error) {
 }
 
 type Store interface {
-	AddDomain(string, int) error
+	AddDomain(string) error
+	GetRandomDomain() string
 }
 
-func saveCollection(c map[string]int, db Store) {
-	for name, val := range c {
-		_ = db.AddDomain(name, val)
+func saveCollection(c map[string]interface{}, db Store) {
+	for name := range c {
+		_ = db.AddDomain(name)
 	}
 }

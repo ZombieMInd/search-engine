@@ -3,11 +3,10 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/ZombieMInd/search-engine/internal/store"
 	"net/http"
 	"time"
 
-	"github.com/ZombieMInd/go-logger/internal/logger"
-	"github.com/ZombieMInd/go-logger/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
@@ -21,18 +20,9 @@ const (
 type ctxKey int8
 
 type server struct {
-	router   *mux.Router
-	logger   *logrus.Logger
-	services Services
-	store    store.Store
-}
-
-type LogService interface {
-	Save(*logger.LogRequest) error
-}
-
-type Services struct {
-	Log LogService
+	router *mux.Router
+	logger *logrus.Logger
+	store  store.Store
 }
 
 func NewServer(store store.Store) *server {
@@ -105,7 +95,5 @@ func (s *server) configLogger(conf *Config) {
 }
 
 func (s *server) InitServices(config *Config) error {
-	repository := s.store.Log()
-	s.services.Log = logger.NewService(repository)
 	return nil
 }

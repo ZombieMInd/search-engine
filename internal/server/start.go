@@ -4,13 +4,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/ZombieMInd/search-engine/internal/store"
+	"github.com/ZombieMInd/search-engine/internal/store/redisstore"
+	"github.com/ZombieMInd/search-engine/internal/store/sqlstore"
 	"log"
 	"net/http"
 	"net/http/pprof"
 
-	"github.com/ZombieMInd/go-logger/internal/store"
-	"github.com/ZombieMInd/go-logger/internal/store/redisstore"
-	"github.com/ZombieMInd/go-logger/internal/store/sqlstore"
 	"github.com/go-redis/redis"
 	"github.com/gorilla/handlers"
 	"github.com/kelseyhightower/envconfig"
@@ -65,13 +65,14 @@ func newDB(dbURL string) (*sql.DB, error) {
 }
 
 func initStore(conf *Config) (store.Store, error) {
-	if conf.StoreMode == "postgres" {
-		db, err := newDB(conf.DBURL)
+	if conf.DB.StoreMode == "postgres" {
+		db, err := newDB(conf.DB.DBURL)
 		if err != nil {
 			return nil, err
 		}
+
 		return sqlstore.New(db), nil
-	} else if conf.StoreMode == "redis" {
+	} else if conf.DB.StoreMode == "redis" {
 		client := redis.NewClient(&redis.Options{
 			Addr:     conf.Redis.Host,
 			Password: conf.Redis.Password,
@@ -85,5 +86,6 @@ func initStore(conf *Config) (store.Store, error) {
 
 		return redisstore.New(client), nil
 	}
+
 	return nil, errors.New("unknown store mode")
 }
