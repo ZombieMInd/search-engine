@@ -2,44 +2,20 @@ package main
 
 import (
 	"fmt"
-	"github.com/ZombieMInd/search-engine/internal/constants"
 	"github.com/ZombieMInd/search-engine/internal/store/redisstore"
 	collector "github.com/ZombieMInd/search-engine/internal/url_collector"
+	"github.com/ZombieMInd/search-engine/internal/url_collector/domain"
 	"github.com/go-redis/redis"
 	"github.com/kelseyhightower/envconfig"
 	"log"
-	"time"
 )
 
 func main() {
-
-	for i := 0; i < 50; i++ {
-		go run()
-	}
-
-	go func() {
-		cfg := &collector.Config{}
-		err := InitConfig(cfg)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		db, err := initDB(cfg)
-		if err != nil {
-			log.Fatal(err)
-		}
-		for {
-			log.Printf("total count: %d", db.GetDomainsCount())
-			time.Sleep(5 * time.Second)
-		}
-	}()
 
 	run()
 }
 
 func run() {
-	collection := map[string]interface{}{}
-
 	cfg := &collector.Config{}
 	err := InitConfig(cfg)
 	if err != nil {
@@ -51,30 +27,9 @@ func run() {
 		log.Fatal(err)
 	}
 
-	collection = initCollection(db)
-
-	for {
-		collection = collector.Collect(collection)
-		//log.Printf("collected %d domains\n", len(collection))
-
-		if len(collection) > 0 {
-			saveCollection(collection, db)
-		}
-
-		collection = initCollection(db)
-	}
-}
-
-func initCollection(db Store) map[string]interface{} {
-	initialValue := db.GetRandomDomain()
-	if initialValue == "" {
-		initialValue = constants.DefaultURLForCollection
-	}
-
-	//log.Printf("collection initialized with %s\n", initialValue)
-
-	return map[string]interface{}{
-		initialValue: nil,
+	for i := 0; i < 10; i++ {
+		URL := db.PopDomain()
+		domain.Collect(URL, db)
 	}
 }
 
@@ -99,15 +54,4 @@ func initDB(cfg *collector.Config) (*redisstore.Store, error) {
 	}
 
 	return redisstore.New(client), nil
-}
-
-type Store interface {
-	AddDomain(string) error
-	GetRandomDomain() string
-}
-
-func saveCollection(c map[string]interface{}, db Store) {
-	for name := range c {
-		_ = db.AddDomain(name)
-	}
 }
