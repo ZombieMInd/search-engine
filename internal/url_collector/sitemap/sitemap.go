@@ -9,6 +9,7 @@ type Page struct {
 	Keywords    map[string]interface{}
 	Title       string
 	Description string
+	Text        string
 }
 
 type Sitemap struct {

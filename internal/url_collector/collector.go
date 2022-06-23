@@ -1,104 +1,53 @@
 package collector
 
 import (
-	"context"
-	"github.com/PuerkitoBio/goquery"
-	"github.com/ZombieMInd/search-engine/internal/constants"
-	"github.com/sirupsen/logrus"
-	"io"
-	"net/http"
-	"net/url"
-	"strings"
-	"time"
+	"fmt"
+	"github.com/ZombieMInd/search-engine/internal/store/redisstore"
+	"github.com/ZombieMInd/search-engine/internal/url_collector/domain"
+	"github.com/go-redis/redis"
+	"github.com/kelseyhightower/envconfig"
+	"log"
 )
 
-func CollectFromPage(baseURL string, urlsCh chan string, done chan bool, level int) {
-	if level <= 0 {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2000*time.Millisecond)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", baseURL, nil)
+func run() {
+	cfg := &Config{}
+	err := InitConfig(cfg)
 	if err != nil {
-		return
+		log.Fatal(err)
 	}
 
-	res, err := http.DefaultClient.Do(req)
+	db, err := initDB(cfg)
 	if err != nil {
-		done <- true
-		return
+		log.Fatal(err)
 	}
 
-	defer func(Body io.ReadCloser) {
-		errClose := Body.Close()
-		if errClose != nil {
-			logrus.Errorf("some closing err: %v", errClose)
-		}
-	}(res.Body)
+	col := domain.NewCollector(db)
 
-	if res.StatusCode != 200 {
-		return
+	for i := 0; i < 10; i++ {
+		URL := db.PopDomain()
+		domain.Collect(URL, db)
 	}
-
-	doc, err := goquery.NewDocumentFromReader(res.Body)
-	if err != nil {
-		return
-	}
-
-	parsedBase, _ := url.Parse(baseURL)
-
-	doc.Find("a").Each(func(i int, s *goquery.Selection) {
-		u, ok := s.Attr("href")
-		if ok {
-			if strings.HasPrefix(u, "/#") {
-				return
-			}
-
-			parsed, errPars := url.Parse(u)
-			if errPars != nil {
-				return
-			}
-
-			if parsed.Host == "" {
-				u = parsedBase.Scheme + "://" + parsedBase.Host + u
-			} else {
-				urlsCh <- parsedBase.Scheme + "://" + parsed.Host
-			}
-
-			level--
-			go CollectFromPage(u, urlsCh, done, level)
-		}
-	})
-
-	return
 }
 
-func Collect(urls map[string]interface{}) map[string]interface{} {
-	urlsCh := make(chan string, 1)
-	done := make(chan bool)
+func InitConfig(conf *Config) error {
+	err := envconfig.Process("collector", conf)
+	if err != nil {
+		return fmt.Errorf("error while parsing env config: %s", err)
+	}
+	return nil
+}
 
-	lastURL := constants.DefaultURLForCollection
+func initDB(cfg *Config) (*redisstore.Store, error) {
+	client := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Host,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
 
-	for i := range urls {
-		lastURL = i
-		delete(urls, i)
-		break
+	_, err := client.Ping().Result()
+	if err != nil {
+		return nil, err
 	}
 
-	go CollectFromPage(lastURL, urlsCh, done, 5)
-
-	timeout := time.After(6 * time.Second)
-
-	for {
-		select {
-		case val := <-urlsCh:
-			urls[val] = nil
-		case <-timeout:
-			return urls
-		case <-done:
-			return urls
-		}
-	}
+	return redisstore.New(client), nil
 }
