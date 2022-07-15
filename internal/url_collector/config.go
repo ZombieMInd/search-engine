@@ -7,4 +7,5 @@ type Config struct {
 	TagsToCollect string `envconfig:"TAGS_TO_COLLECT" default:"h1,h2"`
 	DB            common.DBConfig
 	Redis         common.RedisConfig
+	DetaBase      common.DetaBaseConfig
 }
