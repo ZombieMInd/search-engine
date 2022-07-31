@@ -11,9 +11,6 @@ type Store interface {
 	SaveURLs(map[string]interface{}, *sync.WaitGroup)
 	DeleteUnchecked(d string)
 	AddDomain(d string, checked bool)
-	GetDomains() error
-	GetDomainByKey(key string) string
-	Add(key, data string)
 }
 
 type SearchStore interface {
@@ -102,8 +99,10 @@ func (c *Collector) Collect(URL string) {
 					go c.store.SaveURLs(externalsMap, wg)
 				}
 
-				wg.Add(1)
-				go c.searchStore.SaveSitemap(sm, wg, errCh)
+				if len(sm.Pages) > 0 {
+					wg.Add(1)
+					go c.searchStore.SaveSitemap(sm, wg, errCh)
+				}
 				wg.Wait()
 
 				select {
